@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package events.order.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// OrderVoidedEvent represents the event emitted when an order is voided
+message OrderVoidedEvent {
+  // Metadata contains event-level information
+  EventMetadata metadata = 1;
+  // Data contains the business payload
+  OrderVoidedData data = 2;
+}
+
+// EventMetadata contains common metadata for all events
+message EventMetadata {
+  // Unique identifier for the event
+  string event_id = 1;
+  // Type of the event
+  string event_type = 2;
+  // Version of the event payload
+  int32 version = 3;
+  // Version of the schema definition
+  string schema_version = 4;
+  // Timestamp when the event was created
+  google.protobuf.Timestamp timestamp = 5;
+}
+
+// OrderVoidedData contains the business data for the void event
+message OrderVoidedData {
+  // Unique identifier of the order that was voided
+  string order_id = 1;
+  // ID of the customer who owned the order
+  string customer_id = 2;
+  // Timestamp when the order was voided
+  google.protobuf.Timestamp voided_at = 3;
+  // ID of the user who voided the order
+  string voided_by = 4;
+  // Reason for voiding the order
+  VoidReason void_reason = 5;
+  // Additional notes about why the order was voided
+  string void_notes = 6;
+  // Original order amount that was voided
+  Money original_amount = 7;
+  // Refund details if applicable
+  RefundDetails refund = 8;
+}
+
+// VoidReason represents the reason why an order was voided
+enum VoidReason {
+  VOID_REASON_UNSPECIFIED = 0;
+  VOID_REASON_CUSTOMER_REQUEST = 1;
+  VOID_REASON_FRAUDULENT_ORDER = 2;
+  VOID_REASON_SYSTEM_ERROR = 3;
+  VOID_REASON_INVENTORY_ISSUE = 4;
+  VOID_REASON_PRICING_ERROR = 5;
+  VOID_REASON_DUPLICATE_ORDER = 6;
+  VOID_REASON_OTHER = 7;
+}
+
+// Money represents a monetary amount with currency
+message Money {
+  // The amount in the smallest currency unit (e.g., cents)
+  int64 amount = 1;
+  // The currency code (e.g., USD, EUR)
+  string currency = 2;
+}
+
+// RefundDetails contains information about the refund if one was issued
+message RefundDetails {
+  // Unique identifier for the refund
+  string refund_id = 1;
+  // Status of the refund
+  RefundStatus status = 2;
+  // Amount being refunded
+  Money refund_amount = 3;
+  // Timestamp when the refund was initiated
+  google.protobuf.Timestamp refund_initiated_at = 4;
+  // Timestamp when the refund was completed (if successful)
+  google.protobuf.Timestamp refund_completed_at = 5;
+  // Payment processor's transaction ID
+  string processor_transaction_id = 6;
+}
+
+// RefundStatus represents the current status of a refund
+enum RefundStatus {
+  REFUND_STATUS_UNSPECIFIED = 0;
+  REFUND_STATUS_PENDING = 1;
+  REFUND_STATUS_COMPLETED = 2;
+  REFUND_STATUS_FAILED = 3;
+}

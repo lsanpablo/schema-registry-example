@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/order-created-event.schema.json",
+  "type": "object",
+  "title": "OrderCreatedEvent",
+  "description": "Schema for an event representing a newly created order",
+  "required": ["metadata", "data"],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "version",
+        "timestamp",
+        "schema_version"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "description": "Unique identifier for the event",
+          "pattern": "^evt_[a-zA-Z0-9]+$"
+        },
+        "event_type": {
+          "type": "string",
+          "description": "Type of the event",
+          "enum": ["order.created"]
+        },
+        "version": {
+          "type": "integer",
+          "description": "Version of the event payload",
+          "minimum": 1
+        },
+        "schema_version": {
+          "type": "string",
+          "description": "Version of the schema definition",
+          "pattern": "^\\d+\\.\\d+$"
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Time when the event was created",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "order_id",
+        "customer_id",
+        "order_status",
+        "created_at",
+        "total_amount",
+        "items",
+        "shipping_address"
+      ],
+      "properties": {
+        "order_id": {
+          "type": "string",
+          "description": "Unique identifier for the order",
+          "pattern": "^ord_[a-zA-Z0-9]+$"
+        },
+        "customer_id": {
+          "type": "string",
+          "description": "Unique identifier for the customer",
+          "pattern": "^cust_[a-zA-Z0-9]+$"
+        },
+        "order_status": {
+          "type": "string",
+          "description": "Current status of the order",
+          "enum": ["created"]
+        },
+        "created_at": {
+          "type": "string",
+          "description": "Time when the order was created",
+          "format": "date-time"
+        },
+        "total_amount": {
+          "type": "number",
+          "description": "Total amount of the order",
+          "exclusiveMinimum": 0
+        },
+        "items": {
+          "type": "array",
+          "description": "List of items in the order",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["product_id", "quantity", "unit_price", "total_price"],
+            "properties": {
+              "product_id": {
+                "type": "string",
+                "description": "Unique identifier for the product",
+                "pattern": "^prod_[a-zA-Z0-9]+$"
+              },
+              "quantity": {
+                "type": "integer",
+                "description": "Number of items ordered",
+                "minimum": 1
+              },
+              "unit_price": {
+                "type": "number",
+                "description": "Price per unit",
+                "exclusiveMinimum": 0
+              },
+              "total_price": {
+                "type": "number",
+                "description": "Total price for this item (quantity * unit_price)",
+                "exclusiveMinimum": 0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "shipping_address": {
+          "type": "object",
+          "required": ["street", "city", "state", "postal_code", "country"],
+          "properties": {
+            "street": {
+              "type": "string",
+              "description": "Street address"
+            },
+            "city": {
+              "type": "string",
+              "description": "City name"
+            },
+            "state": {
+              "type": "string",
+              "description": "State or province",
+              "minLength": 2
+            },
+            "postal_code": {
+              "type": "string",
+              "description": "Postal or ZIP code"
+            },
+            "country": {
+              "type": "string",
+              "description": "Country name"
+            }
+          },
+          "additionalProperties": false
+        },
+        "shipping_method": {
+          "type": "string",
+          "description": "Method of shipping",
+          "enum": ["standard", "express", "overnight"]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
