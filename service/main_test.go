@@ -170,7 +170,7 @@ func TestValidateEvent_Success(t *testing.T) {
 	resp, err := client.ValidateEvent(context.Background(), &schemaregistry.ValidateEventRequest{
 		EventSchemaId: "order.created",
 		Payload:       payload,
-		Format:        "json",
+		Format:        schemaregistry.Format_FORMAT_JSON,
 	})
 
 	if err != nil {
@@ -446,7 +446,7 @@ func TestValidateEvent_Failures(t *testing.T) {
 			resp, err := client.ValidateEvent(context.Background(), &schemaregistry.ValidateEventRequest{
 				EventSchemaId: tc.eventSchema,
 				Payload:       payload,
-				Format:        "json",
+				Format:        schemaregistry.Format_FORMAT_JSON,
 			})
 			if err != nil {
 				t.Fatalf("ValidateEvent failed: %v", err)
@@ -467,7 +467,7 @@ func TestValidateEvent_SchemaNotFound(t *testing.T) {
 	resp, err := client.ValidateEvent(context.Background(), &schemaregistry.ValidateEventRequest{
 		EventSchemaId: "schema not found",
 		Payload:       []byte(`{}`),
-		Format:        "json",
+		Format:        schemaregistry.Format_FORMAT_JSON,
 	})
 
 	if err != nil {

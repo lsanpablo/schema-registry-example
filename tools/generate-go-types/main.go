@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -150,6 +149,8 @@ func (schema *Schema) IsFalse() bool {
 	return false
 }
 
+var nestedTypes = make(map[string]*Schema)
+
 func formatId(s string) string {
 	fields := strings.FieldsFunc(s, func(c rune) bool {
 		return !unicode.IsLetter(c) && !unicode.IsNumber(c)
@@ -225,27 +226,39 @@ func isRequired(schema *Schema, propName string) bool {
 	return false
 }
 
-func generateStruct(schema *Schema, root *Schema) jen.Code {
-	var names []string
-	for name := range schema.Properties {
-		names = append(names, name)
-	}
-	sort.Strings(names)
+func generateStruct(name string, schema *Schema, root *Schema, f *jen.File) jen.Code {
+	// record nested type
+	nestedTypes[name] = schema
 
+	// build fields
+	var propNames []string
+	for p := range schema.Properties {
+		propNames = append(propNames, p)
+	}
+	sort.Strings(propNames)
 	var fields []jen.Code
-	for _, name := range names {
-		prop := schema.Properties[name]
-		id := formatId(name)
-		required := isRequired(schema, name)
-		t := generateSchemaType(&prop, root, required)
-		jsonTag := name
+	for _, propName := range propNames {
+		prop := schema.Properties[propName]
+		id := formatId(propName)
+		required := isRequired(schema, propName)
+
+		// determine Go type
+		t := generateSchemaType(propName, &prop, root, required, f)
+
+		// json tag
+		jsonTag := propName
 		if !required {
 			jsonTag += ",omitempty"
 		}
-		tags := map[string]string{"json": jsonTag}
+		// zog tag: lower case field name without underscores
+		zogTag := strings.ToLower(strings.ReplaceAll(propName, "_", ""))
+		tags := map[string]string{"json": jsonTag, "zog": zogTag}
 		fields = append(fields, jen.Id(id).Add(t).Tag(tags))
 	}
-	return jen.Struct(fields...)
+
+	// emit type
+	f.Type().Id(name).Struct(fields...).Line()
+	return jen.Id(name)
 }
 
 func singlePatternProp(schema *Schema) *Schema {
@@ -293,7 +306,7 @@ func unwrapNullableSchema(schema *Schema) (*Schema, bool) {
 	return nil, false
 }
 
-func generateSchemaType(schema *Schema, root *Schema, required bool) jen.Code {
+func generateSchemaType(propName string, schema *Schema, root *Schema, required bool, f *jen.File) jen.Code {
 	if schema == nil {
 		schema = &Schema{}
 	}
@@ -309,7 +322,7 @@ func generateSchemaType(schema *Schema, root *Schema, required bool) jen.Code {
 	}
 
 	if subschema, ok := unwrapNullableSchema(schema); ok {
-		return jen.Op("*").Add(generateSchemaType(subschema, root, true))
+		return jen.Op("*").Add(generateSchemaType(propName, subschema, root, true, f))
 	}
 
 	switch schemaType(schema) {
@@ -317,8 +330,6 @@ func generateSchemaType(schema *Schema, root *Schema, required bool) jen.Code {
 		return jen.Struct()
 	case TypeBoolean:
 		return jen.Bool()
-	case TypeArray:
-		return jen.Index().Add(generateSchemaType(schema.Items, root, required))
 	case TypeNumber:
 		return jen.Qual("encoding/json", "Number")
 	case TypeString:
@@ -326,18 +337,19 @@ func generateSchemaType(schema *Schema, root *Schema, required bool) jen.Code {
 	case TypeInteger:
 		return jen.Int64()
 	case TypeObject:
-		noAdditionalProps := noAdditionalProps(schema)
-		if noAdditionalProps && len(schema.PatternProperties) == 0 {
-			t := generateStruct(schema, root)
-			if !required {
-				t = jen.Op("*").Add(t)
-			}
-			return t
-		} else if patternProp := singlePatternProp(schema); noAdditionalProps && patternProp != nil {
-			return jen.Map(jen.String()).Add(generateSchemaType(patternProp, root, true))
-		} else {
-			return jen.Map(jen.String()).Add(generateSchemaType(schema.AdditionalProperties, root, true))
+		// name nested struct as Parent + Field
+		nestedName := "" // find last type defined in f to get context
+		// For simplicity, derive a unique nested name
+		nestedName = formatId(propName)
+		// generate that nested struct
+		generateStruct(nestedName, schema, root, f)
+		typeCode := jen.Id(nestedName)
+		if !required {
+			typeCode = jen.Op("*").Add(typeCode)
 		}
+		return typeCode
+	case TypeArray:
+		return jen.Index().Add(generateSchemaType(propName, schema.Items, root, true, f))
 	default:
 		return jen.Qual("encoding/json", "RawMessage")
 	}
@@ -345,59 +357,12 @@ func generateSchemaType(schema *Schema, root *Schema, required bool) jen.Code {
 
 func generateDef(schema *Schema, root *Schema, f *jen.File, name string) {
 	id := formatId(name)
-
-	if schema.Ref == "" && schemaType(schema) == "" {
-		f.Type().Id(id).Struct(
-			jen.Qual("encoding/json", "RawMessage"),
-		).Line()
-
-		var children []Schema
-		for _, child := range schema.AllOf {
-			children = append(children, child)
-		}
-		for _, child := range schema.AnyOf {
-			children = append(children, child)
-		}
-		for _, child := range schema.OneOf {
-			children = append(children, child)
-		}
-		if schema.Then != nil {
-			children = append(children, *schema.Then)
-		}
-		if schema.Else != nil {
-			children = append(children, *schema.Else)
-		}
-		for _, child := range schema.DependentSchemas {
-			children = append(children, child)
-		}
-
-		for _, child := range children {
-			refName := refName(child.Ref)
-			if refName == "" {
-				continue
-			}
-
-			t := generateSchemaType(&child, root, false)
-
-			f.Func().Params(
-				jen.Id("v").Id(id),
-			).Id(formatId(refName)).Params().Params(
-				t,
-				jen.Id("error"),
-			).Block(
-				jen.Var().Id("out").Add(t),
-				jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Params(
-					jen.Id("v").Op(".").Id("RawMessage"),
-					jen.Op("&").Id("out"),
-				),
-				jen.Return(
-					jen.Id("out"),
-					jen.Id("err"),
-				),
-			).Line()
-		}
+	// for root and defs, use named struct generator
+	if schemaType(schema) == TypeObject {
+		generateStruct(id, schema, root, f)
 	} else {
-		f.Type().Id(id).Add(generateSchemaType(schema, root, true)).Line()
+		// unchanged: alias simple types
+		f.Type().Id(id).Add(generateSchemaType(name, schema, root, true, f)).Line()
 	}
 }
 
@@ -432,9 +397,6 @@ func main() {
 	flag.StringVar(&schemaFilename, "s", "", "schema filename")
 	flag.StringVar(&outputFilename, "o", "", "output filename")
 	flag.StringVar(&pkgName, "n", "", "package name")
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, usage)
-	}
 	flag.Parse()
 
 	if schemaFilename == "" || outputFilename == "" || len(flag.Args()) > 0 {
@@ -453,20 +415,21 @@ func main() {
 	schema := loadSchema(schemaFilename)
 	f := jen.NewFile(pkgName)
 
+	// generate root and definitions
 	if schema.Ref == "" {
 		generateDef(schema, schema, f, "root")
 	}
-
-	var names []string
-	for name := range schema.Defs {
-		names = append(names, name)
+	var defNames []string
+	for d := range schema.Defs {
+		defNames = append(defNames, d)
 	}
-	sort.Strings(names)
-	for _, name := range names {
-		def := schema.Defs[name]
-		generateDef(&def, schema, f, name)
+	sort.Strings(defNames)
+	for _, d := range defNames {
+		elem := schema.Defs[d]
+		generateDef(&elem, schema, f, d)
 	}
 
+	// save file
 	if err := f.Save(outputFilename); err != nil {
 		log.Fatalf("failed to save output file: %v", err)
 	}
