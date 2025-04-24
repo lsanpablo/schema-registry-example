@@ -36,6 +36,9 @@
     devShells = forAllSystems ({ pkgs, ... }: {
       default = pkgs.mkShell {
         packages = [
+        pkgs.protobuf_23
+        pkgs.protoc-gen-go
+        pkgs.protoc-gen-go-grpc
           self.packages.${pkgs.system}.event-template
           self.packages.${pkgs.system}.generate-index
           self.packages.${pkgs.system}.generate-go-types

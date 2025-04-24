@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package schemaregistrygrp;
+option go_package = "./schemaregistrygrpc;schemaregistry";
+
+
+service SchemaRegistry {
+  rpc ValidateEvent (ValidateEventRequest) returns (ValidateEventResponse);
+}
+
+message ValidateEventRequest {
+  string event_schema_id = 1;
+  bytes payload = 2;
+  Format format = 3;
+}
+
+message ValidateEventResponse {
+  bool valid = 1;
+  string message = 2;
+}
+
+enum Format {
+  FORMAT_JSON = 0;
+  FORMAT_AVRO = 1;
+}
